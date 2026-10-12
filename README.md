@@ -7,6 +7,12 @@ Crowdsourced map of how to connect to WiFi in cafes, hotels, airports, and more.
 2. `npm install`
 3. `npm run db:up && npm run db:migrate`
 4. Import places: fetch with the Overpass query in `scripts/overpass/istanbul.overpassql`, then `npm run import:osm -- data/istanbul.json TR`.
+   ```
+   mkdir -p data
+   curl -sS -A "wifi-near-me-dev" --data-urlencode data@scripts/overpass/istanbul.overpassql https://overpass-api.de/api/interpreter -o data/istanbul.json
+   npm run import:osm -- data/istanbul.json TR
+   ```
+   For all of Turkey, use many small bounding boxes or a Geofabrik extract, never one huge query.
 5. `npm run dev`
 
 `NEXT_PUBLIC_*` values are fixed at build time. After you change one, rebuild.
@@ -15,7 +21,9 @@ Crowdsourced map of how to connect to WiFi in cafes, hotels, airports, and more.
 `npm test`. It needs the Docker database (`npm run db:up`). Tests refuse to run against a database whose name does not end in `_test`.
 
 ## Moderation
-`npm run moderate -- list` shows hidden and pending entries. Other commands: `approve`, `hide`, `restore`, `history`, `revert` (each takes an entry id).
+`npm run moderate -- list` shows hidden and pending entries. Other commands: `approve`, `hide`, `restore`, `history` (each takes an entry id).
+`revert <entryId> [revisionId]` goes back to the previous revision, or to a revision id from `history`.
+`delete-place <placeId>` deletes a place that a user added, with its entries. It does not delete OpenStreetMap places.
 To review every new entry before it shows, set `NEW_ENTRY_STATUS=pending` and approve entries with the tool.
 
 ## Abuse controls
@@ -26,9 +34,12 @@ To review every new entry before it shows, set `NEW_ENTRY_STATUS=pending` and ap
 - IP detection trusts `x-forwarded-for`. Vercel sets this header itself. Behind another proxy, confirm that the proxy overwrites it.
 
 ## Production (Vercel + Supabase)
-- Create a Supabase project. Enable PostGIS in the dashboard, then run `npm run db:migrate` with the production `DATABASE_URL`. The migration enables Row Level Security on every table, which blocks Supabase's automatic REST API. Keep it on.
+- Create a Supabase project. The migration enables Row Level Security on every table, which blocks Supabase's automatic REST API. Keep it on.
+- Enable PostGIS from the Supabase dashboard before migrating (it installs into the `extensions` schema); confirm `ST_*` calls work (open item 1).
+- Run `npm run db:migrate` with the direct (or session) connection string, not the transaction pooler.
 - Use the Supabase transaction pooler connection string for `DATABASE_URL` and set `DB_PREPARE=false`.
 - Set on Vercel: `DATABASE_URL`, `DB_PREPARE`, `ACTOR_SALT` (long random value, required in production), `EXPOSE_PASSWORDS`, `NEW_ENTRY_STATUS`, `REPORT_HIDE_THRESHOLD`, `REPORT_HIDE_MIN_IPS`, `PHOTON_URL`, `CONTACT_EMAIL`, `NEXT_PUBLIC_TILE_STYLE_URL`.
+- `NEXT_PUBLIC_TILE_STYLE_URL` and `CONTACT_EMAIL` are fixed at build time (the legal pages are static). Rebuild after changing them.
 - Geocoder: the public Photon server has no guaranteed capacity. If search gets throttled, self-host Photon or use a paid geocoder and change `PHOTON_URL` (the response format must match Photon, or `lib/geocode.ts` must be adapted).
 
 ## Where the rules live

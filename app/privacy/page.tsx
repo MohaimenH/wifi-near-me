@@ -18,10 +18,10 @@ export default function PrivacyPage() {
       </ul>
 
       <h2>What we do not store</h2>
-      <p>Your location stays in your browser. To find places, the browser sends the center of the map, not your exact position, and we do not save it.</p>
+      <p>Your exact location stays in your browser. To find places, the browser sends the center of the map, rounded to about 100 meters. After you press “Use my location”, that center is near your position. We do not save it.</p>
 
       <h2>How long we keep data</h2>
-      <p>Rate-limit records are deleted after one day. Votes, reports, and entries stay while the entry exists.</p>
+      <p>Rate-limit records are deleted after about one day. Votes, reports, and entries stay while the entry exists.</p>
 
       <h2>Other services</h2>
       <ul>
