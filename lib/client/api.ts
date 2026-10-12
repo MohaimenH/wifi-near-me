@@ -15,7 +15,16 @@ export class ApiError extends Error {
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  const body = (await res.json().catch(() => ({}))) as { error?: string; issues?: { path: string; message: string }[] };
+  let body: { error?: string; issues?: { path: string; message: string }[] };
+  try {
+    body = await res.json();
+  } catch (e) {
+    // An abort is not a bad answer. The caller ignores it.
+    if ((e as Error | null)?.name === "AbortError") throw e;
+    // An OK answer that is not JSON (for example a proxy page) must not look like success.
+    if (res.ok) throw new ApiError(res.status, "bad_response");
+    body = {};
+  }
   if (!res.ok) throw new ApiError(res.status, body.error ?? "server_error", body.issues);
   return body as T;
 }
@@ -37,8 +46,9 @@ export interface EntryBody {
 }
 export type EntryEditBody = EntryBody & { password_clear: boolean };
 
+/** lat and lng are rounded to 3 decimals (about 100 m), so the server never gets the exact position. */
 export async function fetchNearby(v: { lat: number; lng: number; radius_m: number }, signal?: AbortSignal): Promise<PlaceSummary[]> {
-  const qs = new URLSearchParams({ lat: String(v.lat), lng: String(v.lng), radius_m: String(Math.round(v.radius_m)) });
+  const qs = new URLSearchParams({ lat: v.lat.toFixed(3), lng: v.lng.toFixed(3), radius_m: String(Math.round(v.radius_m)) });
   return (await request<{ places: PlaceSummary[] }>(`/api/places/nearby?${qs}`, { signal })).places;
 }
 

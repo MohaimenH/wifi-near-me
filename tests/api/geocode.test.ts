@@ -9,7 +9,7 @@ const sql = getSql();
 const saved = { ...LIMITS.geocode };
 afterAll(() => sql.end());
 beforeEach(async () => { await resetDb(sql); cacheClear(); });
-afterEach(() => { vi.unstubAllGlobals(); LIMITS.geocode = { ...saved }; });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); LIMITS.geocode = { ...saved }; });
 
 const photon = { features: [{ geometry: { coordinates: [28.98, 41.03] }, properties: { name: "Taksim", osm_key: "place", osm_value: "quarter", state: "Istanbul", country: "Turkey" } }] };
 const ok = () => vi.fn().mockImplementation(async () => new Response(JSON.stringify(photon), { status: 200 }));
@@ -56,6 +56,17 @@ describe("GET /api/geocode", () => {
     expect(await res.json()).toEqual({ results: [], error: "geocoder_unavailable" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 503 })));
     expect((await call("q=other")).status).toBe(502);
+  });
+
+  it("returns 502 with an empty list when the rate-limit step fails", async () => {
+    const fetchMock = ok();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ACTOR_SALT", "");
+    const res = await call("q=taksim");
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ results: [], error: "geocoder_unavailable" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not send bad lat/lng values upstream", async () => {

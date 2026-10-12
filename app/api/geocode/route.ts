@@ -25,10 +25,15 @@ export async function GET(req: Request) {
   const cached = cacheGet(key);
   if (cached) return json({ results: cached }, 200, { "cache-control": "public, max-age=300" });
 
-  const { actor } = resolveActor(req);
-  const l = LIMITS.geocode;
-  if (!(await consume(getSql(), actor.ipHash, "geocode", l.limit, l.windowSeconds))) {
-    return json({ results: [], error: "rate_limited" }, 429);
+  // A database or config failure here still gives the UI an empty list, not a 500.
+  try {
+    const { actor } = resolveActor(req);
+    const l = LIMITS.geocode;
+    if (!(await consume(getSql(), actor.ipHash, "geocode", l.limit, l.windowSeconds))) {
+      return json({ results: [], error: "rate_limited" }, 429);
+    }
+  } catch {
+    return json({ results: [], error: "geocoder_unavailable" }, 502);
   }
 
   const upstream = new URL("/api/", process.env.PHOTON_URL ?? "https://photon.komoot.io");
