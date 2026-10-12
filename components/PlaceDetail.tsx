@@ -6,6 +6,7 @@ import type { PlaceDetail as PlaceDetailData, PublicEntry } from "@/lib/types";
 interface Props {
   detail: PlaceDetailData;
   onBack(): void;
+  onShare(): void;
   onAddEntry(): void;
   onEdit(entry: PublicEntry): void;
   onVote(entryId: number, kind: "works" | "broken"): void;
@@ -14,7 +15,7 @@ interface Props {
   reported: Record<number, boolean>;
 }
 
-export function PlaceDetail({ detail, onBack, onAddEntry, onEdit, onVote, onReport, myVotes, reported }: Props) {
+export function PlaceDetail({ detail, onBack, onShare, onAddEntry, onEdit, onVote, onReport, myVotes, reported }: Props) {
   return (
     <div className="detail">
       <button className="btn small back" onClick={onBack}>← All places</button>
@@ -65,6 +66,7 @@ export function PlaceDetail({ detail, onBack, onAddEntry, onEdit, onVote, onRepo
       <div className="row">
         <button className="btn primary" onClick={onAddEntry}>+ Add WiFi info</button>
         <a className="btn" target="_blank" rel="noopener noreferrer" href={directionsUrl(detail)}>Directions in Google Maps ↗</a>
+        <button className="btn" onClick={onShare}>Share link</button>
       </div>
     </div>
   );

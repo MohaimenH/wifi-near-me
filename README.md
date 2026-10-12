@@ -1,6 +1,7 @@
 # WiFi Near Me
 
 Crowdsourced map of how to connect to WiFi in cafes, hotels, airports, and more.
+Each place has a shareable link, `/place/<id>`. The "Share link" button in the place detail copies it, or opens the phone's share menu.
 
 ## Run locally
 1. `cp .env.example .env`. Set `NEXT_PUBLIC_TILE_STYLE_URL` (a tile provider style URL, not the public OSM server) and `CONTACT_EMAIL`.

@@ -36,10 +36,20 @@ function messageFor(e: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
-export function App() {
+const PLACE_PATH = /^\/place\/(\d+)$/;
+
+/** Puts the path in the address bar without a page load, so the user can share a place and Back works. */
+function showPath(path: string) {
+  if (window.location.pathname !== path) window.history.pushState(null, "", path);
+}
+
+/** initialPlace is set on /place/[id]: the app opens at that place. */
+export function App({ initialPlace }: { initialPlace?: { id: number; lat: number; lng: number } }) {
   const [places, setPlaces] = useState<PlaceSummary[]>([]);
   const [placesLoaded, setPlacesLoaded] = useState(false);
-  const [center, setCenter] = useState({ lat: 41.0136, lng: 28.9784 });
+  const [center, setCenter] = useState(
+    initialPlace ? { lat: initialPlace.lat, lng: initialPlace.lng } : { lat: 41.0136, lng: 28.9784 },
+  );
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -76,23 +86,68 @@ export function App() {
     moveTimer.current = setTimeout(loadNearby, 350);
   }, [loadNearby]);
 
-  const select = useCallback(async (id: number, fly = true) => {
+  /** push=false when the address bar already shows the place (first load, browser Back or Forward). */
+  const select = useCallback(async (id: number, fly = true, push = true) => {
     setSelectedId(id);
     try {
       const d = await fetchPlace(id);
       setDetail(d);
+      if (push) showPath(`/place/${id}`);
       if (fly) setFlyTo({ lat: d.lat, lng: d.lng, zoom: 15, nonce: Date.now() });
     } catch (e) {
       showToast(messageFor(e));
       setSelectedId(null);
       setDetail(null);
+      if (push) showPath("/");
     }
   }, [showToast]);
+
+  const closeDetail = () => {
+    setSelectedId(null);
+    setDetail(null);
+    showPath("/");
+  };
+
+  useEffect(() => {
+    if (initialPlace) void select(initialPlace.id, false, false);
+    // Only on the first render: initialPlace comes from the page URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      const m = PLACE_PATH.exec(window.location.pathname);
+      if (m) {
+        void select(Number(m[1]), true, false);
+      } else {
+        setSelectedId(null);
+        setDetail(null);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [select]);
 
   useEffect(() => () => {
     if (moveTimer.current) clearTimeout(moveTimer.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
+
+  const share = async () => {
+    if (!detail) return;
+    const url = `${window.location.origin}/place/${detail.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `${detail.name} – WiFi Near Me`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied.");
+    } catch (e) {
+      // AbortError: the user closed the share menu.
+      if ((e as Error).name !== "AbortError") showToast(`Copy this link: ${url}`);
+    }
+  };
 
   const locate = () => {
     if (!navigator.geolocation) return showToast("Location is not available in this browser.");
@@ -170,8 +225,7 @@ export function App() {
   });
 
   const pickLocation = (r: GeocodeResult) => {
-    setSelectedId(null);
-    setDetail(null);
+    closeDetail();
     setFlyTo({ lat: r.lat, lng: r.lng, zoom: r.zoom, nonce: Date.now() });
   };
 
@@ -204,7 +258,8 @@ export function App() {
               detail={detail}
               myVotes={myVotes}
               reported={reported}
-              onBack={() => { setSelectedId(null); setDetail(null); }}
+              onBack={closeDetail}
+              onShare={share}
               onAddEntry={() => { setFormError(null); setForm({ mode: "entry", placeId: detail.id, placeName: detail.name }); }}
               onEdit={startEdit}
               onVote={vote}
@@ -229,6 +284,7 @@ export function App() {
           userLocation={userLocation}
           flyTo={flyTo}
           pickMode={pickMode}
+          start={initialPlace ? { lat: initialPlace.lat, lng: initialPlace.lng, zoom: 15 } : undefined}
           onSelect={(id) => select(id)}
           onMoveEnd={onMoveEnd}
           onPick={(p) => { setFormError(null); setForm({ mode: "place", lat: p.lat, lng: p.lng }); }}

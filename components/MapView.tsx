@@ -12,6 +12,8 @@ export interface MapViewProps {
   userLocation: { lat: number; lng: number } | null;
   flyTo: { lat: number; lng: number; zoom: number; nonce: number } | null;
   pickMode: boolean;
+  /** Where the map opens. Read once, when the map is created. Default: central Istanbul. */
+  start?: { lat: number; lng: number; zoom: number };
   onSelect(id: number): void;
   onMoveEnd(v: { lat: number; lng: number; radius_m: number }): void;
   onPick(p: { lat: number; lng: number }): void;
@@ -32,11 +34,12 @@ export function MapView(props: MapViewProps) {
     if (!box.current || !styleUrl) return;
     // The bundled library cannot find its worker file, so point it at the copy in public/ (see the postinstall script).
     maplibregl.setWorkerUrl(new URL("/maplibre-gl-worker.mjs", window.location.href).href);
+    const start = latest.current.start ?? START;
     const map = new maplibregl.Map({
       container: box.current,
       style: styleUrl,
-      center: [START.lng, START.lat],
-      zoom: START.zoom,
+      center: [start.lng, start.lat],
+      zoom: start.zoom,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     // wrap() keeps lng in -180..180 after a pan across the antimeridian.
@@ -62,7 +65,8 @@ export function MapView(props: MapViewProps) {
 
   // Without a map style there is no map, but the list still loads for the start area.
   useEffect(() => {
-    if (!styleUrl) latest.current.onMoveEnd({ lat: START.lat, lng: START.lng, radius_m: 3000 });
+    const start = latest.current.start ?? START;
+    if (!styleUrl) latest.current.onMoveEnd({ lat: start.lat, lng: start.lng, radius_m: 3000 });
   }, [styleUrl]);
 
   useEffect(() => {
