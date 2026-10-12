@@ -1,0 +1,38 @@
+{
+  "name": "wifi-near-me",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "import:osm": "tsx scripts/import-osm.ts",
+    "moderate": "tsx scripts/moderate.ts"
+  },
+  "dependencies": {
+    "maplibre-gl": "^4.7.1",
+    "next": "15.5",
+    "postgres": "3.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "dotenv": "^16.6.1",
+    "tsx": "^4.23.15",
+    "typescript": "5.9",
+    "vitest": "3.2"
+  }
+}
