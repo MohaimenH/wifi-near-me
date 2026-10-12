@@ -37,13 +37,16 @@ export function MapView(props: MapViewProps) {
       zoom: START.zoom,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    // wrap() keeps lng in -180..180 after a pan across the antimeridian.
     const emit = () => {
-      const c = map.getCenter();
+      const c = map.getCenter().wrap();
       const ne = map.getBounds().getNorthEast();
       const radius = Math.min(50000, Math.max(50, haversineM(c.lat, c.lng, ne.lat, ne.lng)));
       latest.current.onMoveEnd({ lat: c.lat, lng: c.lng, radius_m: radius });
     };
-    map.on("load", emit);
+    // Camera and bounds exist before tiles, so the list and pins load at once.
+    // "load" waits for all first tiles, so it is not used.
+    emit();
     map.on("moveend", emit);
     map.on("click", (e) => {
       if (latest.current.pickMode) latest.current.onPick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
@@ -53,6 +56,11 @@ export function MapView(props: MapViewProps) {
       map.remove();
       mapRef.current = null;
     };
+  }, [styleUrl]);
+
+  // Without a map style there is no map, but the list still loads for the start area.
+  useEffect(() => {
+    if (!styleUrl) latest.current.onMoveEnd({ lat: START.lat, lng: START.lng, radius_m: 3000 });
   }, [styleUrl]);
 
   useEffect(() => {

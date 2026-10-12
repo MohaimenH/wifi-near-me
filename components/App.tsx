@@ -38,6 +38,7 @@ function messageFor(e: unknown): string {
 
 export function App() {
   const [places, setPlaces] = useState<PlaceSummary[]>([]);
+  const [placesLoaded, setPlacesLoaded] = useState(false);
   const [center, setCenter] = useState({ lat: 41.0136, lng: 28.9784 });
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -65,6 +66,7 @@ export function App() {
   const loadNearby = useCallback(async () => {
     if (!view.current) return;
     try { setPlaces(await fetchNearby(view.current)); } catch { showToast("Could not load places. Please try again."); }
+    finally { setPlacesLoaded(true); }
   }, [showToast]);
 
   const onMoveEnd = useCallback((v: { lat: number; lng: number; radius_m: number }) => {
@@ -208,8 +210,10 @@ export function App() {
               onVote={vote}
               onReport={report}
             />
-          ) : (
+          ) : placesLoaded ? (
             <PlaceList places={visible} onSelect={(id) => select(id)} />
+          ) : (
+            <div className="empty">Loading places…</div>
           )}
         </div>
         <footer className="attrib">
