@@ -120,6 +120,13 @@ describe("editEntry", () => {
     expect(e).toMatchObject({ password: "keep-me", password_policy: "posted_publicly" });
   });
 
+  it("keeps a private password private when an edit sends an empty password marked public", async () => {
+    const id = await created({ password: "secret" });
+    await svc().editEntry(actor(), id, { ...entry, password: "", password_is_public: true });
+    const [e] = await sql`SELECT password, password_policy FROM wifi_entries WHERE id = ${id}`;
+    expect(e).toMatchObject({ password: "secret", password_policy: "none" });
+  });
+
   it("replaces the password when a new one is sent, and removes it with password_clear", async () => {
     const id = await created({ password: "old" });
     await svc().editEntry(actor(), id, { ...entry, password: "new", password_is_public: true });

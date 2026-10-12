@@ -26,6 +26,14 @@ describe("entryInputSchema", () => {
       .toBe("<script>x</script> Şifre: çay");
   });
 
+  it("rejects a NUL character and broken UTF-16 in text", () => {
+    for (const steps_text of ["a\u0000b", "a\uD800b"]) {
+      const r = entryInputSchema.safeParse({ ...ok, steps_text });
+      expect(r.success, JSON.stringify(steps_text)).toBe(false);
+      expect(r.error?.issues[0].message).toBe("Text contains invalid characters");
+    }
+  });
+
   it("rejects an unknown access type", () => {
     expect(entryInputSchema.safeParse({ ...ok, access_type: "magic" }).success).toBe(false);
   });
@@ -61,12 +69,16 @@ describe("nearbyQuerySchema", () => {
   it("parses strings and applies defaults", () => {
     expect(nearbyQuerySchema.parse({ lat: "41.01", lng: "28.97" }))
       .toEqual({ lat: 41.01, lng: 28.97, radius_m: 3000, limit: 100 });
+    expect(nearbyQuerySchema.parse({ lat: "-33.865", lng: "151", radius_m: "1500.5", limit: "20" }))
+      .toEqual({ lat: -33.865, lng: 151, radius_m: 1500.5, limit: 20 });
   });
   it("rejects missing, empty, non-numeric and out-of-range values", () => {
     for (const bad of [
       { lng: "28" }, { lat: "", lng: "28" }, { lat: "abc", lng: "28" }, { lat: "95", lng: "28" },
       { lat: "41", lng: "28", radius_m: "999999999" }, { lat: "41", lng: "28", radius_m: "-5" },
       { lat: "41", lng: "28", limit: "0" }, { lat: "Infinity", lng: "28" },
+      { lat: " ", lng: "28" }, { lat: "0x10", lng: "28" }, { lat: "1e1", lng: "28" },
+      { lat: "41", lng: "28", limit: " " },
     ]) {
       expect(nearbyQuerySchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
     }
