@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFi Near Me – Demo</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #14202b; --muted: #5d6b79; --line: #e3e7ec;
+    --accent: #0b7a75; --accent-ink: #ffffff; --warn: #b4540a; --bad: #b3261e; --good: #1b7f3b;
+    --pin-has: #0b7a75; --pin-none: #8795a3; --pin-new: #3b5bdb;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .app { display: grid; grid-template-columns: 410px 1fr; height: 100%; }
+  .side, .map-wrap { min-width: 0; }
+  .side { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .map-wrap { position: relative; min-height: 0; }
+  #map { position: absolute; inset: 0; }
+
+  header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .brand h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; background: #fff3d6; color: #7a5200; padding: 3px 8px; border-radius: 999px; }
+  .sub { margin: 4px 0 10px; color: var(--muted); font-size: 13px; }
+
+  .search { position: relative; }
+  .search input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .search input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  .suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 20; max-height: 260px; overflow: auto; }
+  .suggest button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 9px 12px; cursor: pointer; }
+  .suggest button:hover, .suggest button:focus { background: #eef6f5; outline: none; }
+  .suggest small { color: var(--muted); }
+  .sg-head { padding: 8px 12px 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .sg-note { padding: 10px 12px; font-size: 13px; color: var(--muted); }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .btn { border: 1px solid var(--line); background: #fff; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px; }
+  .btn:hover { background: #f1f4f7; }
+  a.btn { display: inline-block; text-decoration: none; color: var(--ink); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { background: #096762; }
+  .btn.small { padding: 5px 10px; font-size: 13px; }
+  .btn:focus-visible, .chip:focus-visible, .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .switch { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 10px; background: #f3f6f8; border-radius: 10px; font-size: 13px; }
+  .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .switch span small { display: block; color: var(--muted); }
+
+  .chips { display: flex; gap: 6px; padding: 10px 16px 6px; }
+  .chip { border: 1px solid var(--line); background: #fff; padding: 4px 10px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .scroll { overflow: auto; flex: 1; min-height: 0; }
+  .list { padding: 4px 8px 16px; }
+  .item { display: flex; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 10px 8px; border-radius: 10px; cursor: pointer; align-items: flex-start; }
+  .item:hover { background: #f3f6f8; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--pin-none); }
+  .dot.has { background: var(--pin-has); }
+  .item .name { font-weight: 600; }
+  .item .meta { color: var(--muted); font-size: 13px; }
+  .item .dist { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .empty { padding: 24px 16px; color: var(--muted); text-align: center; }
+
+  .detail { padding: 14px 16px 24px; }
+  .back { margin-bottom: 8px; }
+  .detail h2 { margin: 4px 0 2px; font-size: 20px; letter-spacing: -.01em; }
+  .detail .meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .card { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin: 10px 0; background: #fff; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; background: #e8eef3; color: #34495e; }
+  .badge.open { background: #dff5e6; color: #14602b; }
+  .badge.password { background: #e3ecff; color: #26418f; }
+  .badge.portal { background: #e6f3f2; color: #0b5e59; }
+  .badge.sms { background: #fdeccf; color: #7a4a00; }
+  .badge.id_required, .badge.customers_only { background: #f1e4f7; color: #5f2a78; }
+  .badge.ask_staff { background: #fff3d6; color: #7a5200; }
+  .badge.paid { background: #fbe0de; color: #8a1f17; }
+  .steps { margin: 6px 0 8px; white-space: pre-wrap; }
+  .pw { display: flex; gap: 8px; align-items: center; background: #f3f6f8; padding: 6px 10px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
+  .pw code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+  .pw.hidden-pw { color: var(--muted); }
+  .votes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .votes .btn { color: var(--ink); }
+  .votes .btn.on { background: #e8f3ec; border-color: #9fd0ae; }
+  .votes .btn.on.bad { background: #fbe9e7; border-color: #e5a9a3; }
+  .nodata { background: #f8f9fb; border: 1px dashed #c8d0d8; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--muted); }
+
+  /* pins */
+  .pin { width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pin-none); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); cursor: pointer; }
+  .pin.has { background: var(--pin-has); }
+  .pin.user { background: var(--pin-new); }
+  .pin.sel { outline: 3px solid #ffb703; }
+  .me { width: 16px; height: 16px; border-radius: 50%; background: #1971c2; border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(25,113,194,.25); }
+  .legend { position: absolute; left: 12px; bottom: 28px; background: rgba(255,255,255,.95); border-radius: 10px; padding: 8px 10px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.15); z-index: 5; }
+  .legend div { display: flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 100; max-width: 90vw; font-size: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+  .toast[hidden] { display: none; }
+  .mode-banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: #ffb703; color: #3d2c00; padding: 8px 14px; border-radius: 10px; font-weight: 600; z-index: 6; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  .mode-banner[hidden] { display: none; }
+  .mode-banner button { margin-left: 10px; }
+
+  dialog { border: 0; border-radius: 16px; padding: 0; width: min(520px, 94vw); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  dialog::backdrop { background: rgba(20,32,43,.45); }
+  .dlg { padding: 18px; }
+  .dlg h2 { margin: 0 0 4px; font-size: 18px; }
+  .dlg p.hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  .field { margin: 10px 0; }
+  .field label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .field input[type=text], .field select, .field textarea { width: 100%; padding: 9px 10px; border: 1px solid #cfd6dd; border-radius: 8px; background: #fff; }
+  .field textarea { min-height: 84px; resize: vertical; }
+  .field small { color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .note { font-size: 12px; color: var(--muted); background: #f3f6f8; padding: 8px 10px; border-radius: 8px; margin-top: 10px; }
+
+  @media (max-width: 800px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 46vh 1fr; }
+    .map-wrap { order: -1; }
+    .side { border-right: 0; border-top: 1px solid var(--line); }
+    .legend { bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <header>
+      <div class="brand"><h1>WiFi Near Me</h1><span class="tag">Demo · mock data</span></div>
+      <p class="sub">Find places near you and learn how to connect to their WiFi.</p>
+      <div class="search">
+        <input id="q" type="search" placeholder="Search a city or place (try: Istanbul, airport, library)" autocomplete="off" aria-label="Search a city or place">
+        <div id="suggest" class="suggest" hidden></div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btn-locate">Use my location</button>
+        <button class="btn" id="btn-add-place">Add missing place</button>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pw-switch">
+        <span>Backend allows passwords<small>Shows how one server rule can show or hide the password field.</small></span>
+      </label>
+    </header>
+    <div class="chips" role="group" aria-label="Filter">
+      <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" data-f="has" aria-pressed="false">Has WiFi info</button>
+      <button class="chip" data-f="none" aria-pressed="false">No WiFi info yet</button>
+    </div>
+    <div class="scroll" id="scroll"><div id="panel"></div></div>
+  </aside>
+
+  <main class="map-wrap">
+    <div id="map" aria-label="Map of places"></div>
+    <div id="mode-banner" class="mode-banner" hidden>Click the map to place the new pin <button class="btn small" id="btn-cancel-mode">Cancel</button></div>
+    <div class="legend" aria-hidden="true">
+      <div><i style="background:var(--pin-has)"></i> Has WiFi info</div>
+      <div><i style="background:var(--pin-none)"></i> No WiFi info yet — add it!</div>
+      <div><i style="background:var(--pin-new)"></i> Added by you (demo)</div>
+    </div>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" class="dlg" id="form" autocomplete="off">
+    <h2 id="dlg-title">Add WiFi info</h2>
+    <p class="hint" id="dlg-hint"></p>
+    <div id="place-fields" hidden>
+      <div class="two">
+        <div class="field"><label for="f-pname">Place name</label><input id="f-pname" type="text" maxlength="80"></div>
+        <div class="field"><label for="f-pcat">Category</label>
+          <select id="f-pcat">
+            <option value="cafe">Cafe</option><option value="restaurant">Restaurant</option><option value="hotel">Hotel</option>
+            <option value="hostel">Hostel</option><option value="airport">Airport</option><option value="station">Station</option>
+            <option value="library">Library</option><option value="coworking">Coworking</option><option value="other">Other</option>
+          </select></div>
+      </div>
+    </div>
+    <div class="two">
+      <div class="field"><label for="f-label">Network label</label><input id="f-label" type="text" maxlength="40" placeholder="Guest, Lobby, Lounge"></div>
+      <div class="field"><label for="f-type">How to connect</label>
+        <select id="f-type">
+          <option value="open">Open (no password)</option>
+          <option value="password">Password</option>
+          <option value="portal">Login page (tap Connect)</option>
+          <option value="sms">SMS code</option>
+          <option value="id_required">ID or room number</option>
+          <option value="ask_staff">Ask staff</option>
+          <option value="customers_only">Customers only</option>
+          <option value="paid">Paid</option>
+        </select></div>
+    </div>
+    <div class="field"><label for="f-steps">Steps</label><textarea id="f-steps" maxlength="500" placeholder="Write the steps in simple words. Example: Connect to 'CafeGuest'. Ask the staff for the code."></textarea></div>
+    <div class="two">
+      <div class="field"><label for="f-pw">Password (optional)</label><input id="f-pw" type="text" maxlength="64"><small>Only add a password that the place shows in public.</small></div>
+      <div class="field"><label for="f-lang">Language of steps</label>
+        <select id="f-lang"><option value="en">English</option><option value="tr">Türkçe</option><option value="other">Other</option></select></div>
+    </div>
+    <div class="hp"><label>Website <input id="f-hp" type="text" tabindex="-1" autocomplete="off"></label></div>
+    <div class="note">Demo only. Your entry stays in this browser. The real app saves it to a shared database.</div>
+    <div class="actions">
+      <button type="button" class="btn" id="dlg-cancel">Cancel</button>
+      <button type="submit" class="btn primary" id="dlg-save" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden role="status"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="mock-data.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------- helpers ----------
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ACCESS = {
+    open: "Open", password: "Password", portal: "Login page", sms: "SMS code",
+    id_required: "ID / room no.", ask_staff: "Ask staff", customers_only: "Customers only", paid: "Paid",
+  };
+  const CATEGORY = { airport: "Airport", cafe: "Cafe", restaurant: "Restaurant", hotel: "Hotel", hostel: "Hostel", station: "Station", library: "Library", coworking: "Coworking", other: "Place" };
+  const STORE_KEY = "wifi-near-me-demo-v1";
+
+  function haversine(aLat, aLng, bLat, bLng) {
+    const R = 6371, rad = Math.PI / 180;
+    const dLat = (bLat - aLat) * rad, dLng = (bLng - aLng) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const fmtDist = (km) => (km < 1 ? Math.round(km * 1000) + " m" : km.toFixed(km < 10 ? 1 : 0) + " km");
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200);
+  }
+
+  // ---------- state (in memory + localStorage, demo only) ----------
+  const places = JSON.parse(JSON.stringify(window.MOCK_PLACES));
+  let saved = { newPlaces: [], newEntries: [], myVotes: {}, deltas: {}, reports: {} };
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) saved = Object.assign(saved, JSON.parse(raw)); } catch (e) { /* storage may be blocked */ }
+  function persist() { try { localStorage.setItem(STORE_KEY, JSON.stringify(saved)); } catch (e) { /* ignore */ } }
+
+  saved.newPlaces.forEach((p) => places.push(p));
+  saved.newEntries.forEach((ne) => { const p = places.find((x) => x.id === ne.placeId); if (p) p.entries.push(ne.entry); });
+  places.forEach((p) => p.entries.forEach((e) => {
+    const d = saved.deltas[e.id]; if (d) { e.works += d.works || 0; e.broken += d.broken || 0; }
+  }));
+
+  const state = { filter: "all", selectedId: null, allowPw: false, query: "", mode: null, pendingLngLat: null, pendingPlaceId: null };
+
+  // The ONE place that decides what the API would send (mirrors lib/serializers/wifiEntry.ts in the real plan).
+  function serializeEntry(e, allowPw) {
+    const out = Object.assign({}, e);
+    const canShow = allowPw && e.password && (e.password_policy === "posted_publicly" || e.password_policy === "ask_staff");
+    out.password_visible = !!canShow;
+    if (!canShow) out.password = null;
+    out.has_password = !!e.password;
+    return out;
+  }
+
+  // ---------- map ----------
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 19,
+        attribution: "© OpenStreetMap contributors" } },
+      layers: [{ id: "osm", type: "raster", source: "osm" }],
+    },
+    center: [28.9784, 41.0136], zoom: 11.5,
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+  const markers = new Map();
+  let meMarker = null;
+  let refPoint = { lat: 41.0136, lng: 28.9784 };
+
+  function buildMarkers() {
+    markers.forEach((m) => m.remove()); markers.clear();
+    places.forEach((p) => {
+      const el = document.createElement("div");
+      el.className = "pin " + (p.entries.length ? "has" : "") + (p.source === "user" ? " user" : "") + (p.id === state.selectedId ? " sel" : "");
+      el.setAttribute("role", "button"); el.setAttribute("aria-label", p.name); el.tabIndex = 0;
+      el.addEventListener("click", (ev) => { ev.stopPropagation(); select(p.id, true); });
+      el.addEventListener("keydown", (ev) => { if (ev.key === "Enter") select(p.id, true); });
+      markers.set(p.id, new maplibregl.Marker({ element: el, anchor: "bottom-left", offset: [-4, -4] }).setLngLat([p.lng, p.lat]).addTo(map));
+    });
+  }
+
+  function visiblePlaces() {
+    const q = state.query.trim().toLowerCase();
+    return places.filter((p) => {
+      if (state.filter === "has" && !p.entries.length) return false;
+      if (state.filter === "none" && p.entries.length) return false;
+      if (q && !(p.name.toLowerCase().includes(q) || p.city.toLowerCase().includes(q) || (CATEGORY[p.category] || "").toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
+
+  // ---------- panel rendering ----------
+  function renderList() {
+    state.selectedId = null;
+    const list = visiblePlaces()
+      .map((p) => ({ p, d: haversine(refPoint.lat, refPoint.lng, p.lat, p.lng) }))
+      .sort((a, b) => a.d - b.d);
+    const html = list.length
+      ? '<div class="list">' + list.map(({ p, d }) =>
+          `<button class="item" data-id="${p.id}"><span class="dot ${p.entries.length ? "has" : ""}"></span>
+            <span><span class="name">${esc(p.name)}</span><br><span class="meta">${esc(CATEGORY[p.category] || "Place")} · ${esc(p.city)} · ${p.entries.length ? p.entries.length + " WiFi " + (p.entries.length > 1 ? "networks" : "network") : "No WiFi info yet"}</span></span>
+            <span class="dist">${fmtDist(d)}</span></button>`).join("") + "</div>"
+      : '<div class="empty">No places match. Try another search or filter, or add a missing place.</div>';
+    $("#panel").innerHTML = html;
+    $("#panel").querySelectorAll(".item").forEach((b) => b.addEventListener("click", () => select(Number(b.dataset.id), true)));
+    $("#scroll").scrollTop = 0;
+    refreshPinClasses();
+  }
+
+  // Public Google Maps URL format: no API key, no billing. Coordinates only, so the route goes to the pin.
+  function directionsUrl(p) {
+    return "https://www.google.com/maps/dir/?api=1&destination=" + p.lat.toFixed(6) + "," + p.lng.toFixed(6);
+  }
+
+  function renderDetail(p) {
+    const entries = p.entries.map((e) => serializeEntry(e, state.allowPw));
+    const cards = entries.length ? entries.map((e) => {
+      const mv = saved.myVotes[e.id];
+      let pwRow = "";
+      if (e.password_visible) pwRow = `<div class="pw">Password: <code>${esc(e.password)}</code><button class="btn small" data-copy="${esc(e.password)}">Copy</button></div>`;
+      else if (e.has_password) pwRow = `<div class="pw hidden-pw">Password is hidden by the backend. Turn on “Backend allows passwords” to see how it works.</div>`;
+      return `<div class="card" data-eid="${e.id}">
+        <h3>${esc(e.label)} <span class="badge ${esc(e.access_type)}">${esc(ACCESS[e.access_type] || e.access_type)}</span></h3>
+        <div class="steps">${esc(e.steps_text)}</div>
+        ${pwRow}
+        <div class="votes">
+          <button class="btn small ${mv === "works" ? "on" : ""}" data-vote="works">✓ Works (${e.works})</button>
+          <button class="btn small bad ${mv === "broken" ? "on bad" : ""}" data-vote="broken">✗ Not working (${e.broken})</button>
+          <button class="btn small" data-report="1">${saved.reports[e.id] ? "Reported" : "Report"}</button>
+          <span>Checked ${esc(e.last_confirmed || "just now")}</span>
+        </div></div>`;
+    }).join("") : `<div class="nodata">This place is on the map, but nobody has added WiFi info yet.<br>Be the first to add how to connect.</div>`;
+
+    $("#panel").innerHTML = `<div class="detail">
+      <button class="btn small back" id="btn-back">← All places</button>
+      <h2>${esc(p.name)}</h2>
+      <div class="meta">${esc(CATEGORY[p.category] || "Place")} · ${esc(p.city)}${p.source === "user" ? " · added by you (demo)" : " · from OpenStreetMap (mock)"}</div>
+      ${cards}
+      <div class="row">
+        <button class="btn primary" id="btn-add-entry">+ Add WiFi info</button>
+        <a class="btn" id="btn-directions" target="_blank" rel="noopener noreferrer" href="${esc(directionsUrl(p))}">Directions in Google Maps ↗</a>
+      </div>
+    </div>`;
+    $("#scroll").scrollTop = 0;
+
+    $("#btn-back").addEventListener("click", () => { state.selectedId = null; renderList(); });
+    $("#btn-add-entry").addEventListener("click", () => openDialog("entry", p.id));
+    $("#panel").querySelectorAll("[data-vote]").forEach((b) => b.addEventListener("click", () => vote(b.closest(".card").dataset.eid, b.dataset.vote, p)));
+    $("#panel").querySelectorAll("[data-report]").forEach((b) => b.addEventListener("click", () => report(b.closest(".card").dataset.eid, p)));
+    $("#panel").querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
+      if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy).then(() => toast("Copied"), () => toast("Copy failed"));
+    }));
+  }
+
+  function refreshPinClasses() {
+    markers.forEach((m, id) => m.getElement().classList.toggle("sel", id === state.selectedId));
+  }
+
+  function select(id, fly) {
+    const p = places.find((x) => x.id === id); if (!p) return;
+    state.selectedId = id;
+    renderDetail(p); refreshPinClasses();
+    if (fly) map.flyTo({ center: [p.lng, p.lat], zoom: Math.max(map.getZoom(), 14), speed: 1.4 });
+  }
+
+  // ---------- actions ----------
+  function findEntry(eid) { for (const p of places) for (const e of p.entries) if (String(e.id) === String(eid)) return e; return null; }
+
+  function vote(eid, kind, p) {
+    const e = findEntry(eid); if (!e) return;
+    const prev = saved.myVotes[eid];
+    if (prev === kind) return toast("You already voted. The real app limits one vote per person.");
+    const d = saved.deltas[eid] || { works: 0, broken: 0 };
+    if (prev) { e[prev] -= 1; d[prev] -= 1; }
+    e[kind] += 1; d[kind] += 1;
+    saved.deltas[eid] = d; saved.myVotes[eid] = kind; persist();
+    renderDetail(p); toast("Thanks. Your vote is saved (demo).");
+  }
+  function report(eid, p) {
+    if (saved.reports[eid]) return toast("Already reported.");
+    saved.reports[eid] = true; persist(); renderDetail(p);
+    toast("Reported. In the real app, many reports hide the entry for review.");
+  }
+
+  // ---------- dialog ----------
+  const dlg = $("#dlg");
+  let dlgMode = "entry";
+  function openDialog(mode, placeId) {
+    dlgMode = mode; state.pendingPlaceId = placeId || null;
+    $("#form").reset();
+    $("#place-fields").hidden = mode !== "place";
+    if (mode === "place") {
+      $("#dlg-title").textContent = "Add a missing place";
+      $("#dlg-hint").textContent = "Name the place, then say how to connect to its WiFi.";
+    } else {
+      const p = places.find((x) => x.id === placeId);
+      $("#dlg-title").textContent = "Add WiFi info";
+      $("#dlg-hint").textContent = p ? "For: " + p.name : "";
+    }
+    dlg.showModal();
+  }
+  $("#dlg-cancel").addEventListener("click", () => { dlg.close(); cancelMode(); });
+  dlg.addEventListener("cancel", () => cancelMode());
+
+  $("#form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if ($("#f-hp").value) { dlg.close(); return; } // honeypot: bots fill hidden fields
+    const steps = $("#f-steps").value.trim();
+    if (!steps) { toast("Please write the steps."); return; }
+    let place;
+    if (dlgMode === "place") {
+      const name = $("#f-pname").value.trim();
+      if (!name) { toast("Please enter a place name."); return; }
+      const ll = state.pendingLngLat;
+      place = { id: Date.now(), osm_type: "user", osm_id: null, name, category: $("#f-pcat").value, city: "Your area", lat: ll.lat, lng: ll.lng, entries: [], source: "user" };
+      places.push(place); saved.newPlaces.push(place);
+    } else {
+      place = places.find((x) => x.id === state.pendingPlaceId);
+    }
+    const pw = $("#f-pw").value.trim();
+    const entry = {
+      id: Date.now() + 1, label: $("#f-label").value.trim() || "WiFi", access_type: $("#f-type").value,
+      steps_text: steps.slice(0, 500), language: $("#f-lang").value, password: pw || null,
+      password_policy: pw ? "posted_publicly" : "none", works: 0, broken: 0, last_confirmed: "just now",
+    };
+    place.entries.push(entry);
+    if (place.source === "user") { /* entry travels with the saved place object */ saved.newPlaces = saved.newPlaces.map((x) => (x.id === place.id ? place : x)); }
+    else saved.newEntries.push({ placeId: place.id, entry });
+    persist(); dlg.close(); cancelMode();
+    buildMarkers(); select(place.id, true);
+    toast("Saved (demo). Thank you for helping other travelers.");
+  });
+
+  // ---------- add-place mode ----------
+  function startMode() {
+    state.mode = "place"; $("#mode-banner").hidden = false; map.getCanvas().style.cursor = "crosshair";
+  }
+  function cancelMode() { state.mode = null; $("#mode-banner").hidden = true; map.getCanvas().style.cursor = ""; }
+  $("#btn-add-place").addEventListener("click", startMode);
+  $("#btn-cancel-mode").addEventListener("click", cancelMode);
+  map.on("click", (ev) => {
+    if (state.mode !== "place") return;
+    state.pendingLngLat = ev.lngLat; openDialog("place");
+  });
+
+  // ---------- search ----------
+  const sug = $("#suggest");
+  let localHits = [], liveHits = [], liveStatus = "idle", liveTimer = null, liveAbort = null, liveSeq = 0;
+
+  // Live "major location" suggestions from Photon (free geocoder built on OpenStreetMap).
+  // The real app would call its own server route so the provider and key can change without a client update.
+  function photonKind(pr) {
+    const k = pr.osm_key, v = pr.osm_value;
+    if (k === "aeroway") return { label: "Airport", zoom: 14 };
+    if (k === "railway" || (k === "public_transport")) return { label: "Station", zoom: 16 };
+    if (k === "place") {
+      if (v === "city") return { label: "City", zoom: 11.5 };
+      if (v === "town") return { label: "Town", zoom: 12.5 };
+      if (v === "village") return { label: "Village", zoom: 13.5 };
+      if (v === "suburb" || v === "quarter" || v === "neighbourhood" || v === "district") return { label: "District", zoom: 14 };
+      if (v === "country" || v === "state" || v === "region") return { label: "Region", zoom: 6 };
+      return { label: "Place", zoom: 14 };
+    }
+    if (k === "tourism") return { label: v === "hotel" || v === "hostel" ? "Hotel" : "Attraction", zoom: 16 };
+    if (k === "amenity") return { label: String(v || "place").replace(/_/g, " "), zoom: 16 };
+    if (k === "highway") return { label: "Street", zoom: 16 };
+    return { label: String(v || k || "place").replace(/_/g, " "), zoom: 15 };
+  }
+  function fetchLive(q) {
+    clearTimeout(liveTimer);
+    if (liveAbort) liveAbort.abort();
+    if (q.length < 2) { liveHits = []; liveStatus = "idle"; return; }
+    liveStatus = "loading";
+    const seq = ++liveSeq;
+    liveTimer = setTimeout(() => {
+      liveAbort = new AbortController();
+      const c = map.getCenter();
+      const url = "https://photon.komoot.io/api/?limit=6&lang=en&lat=" + c.lat.toFixed(4) + "&lon=" + c.lng.toFixed(4) + "&q=" + encodeURIComponent(q);
+      fetch(url, { signal: liveAbort.signal })
+        .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then((d) => {
+          if (seq !== liveSeq) return;
+          const seen = new Set();
+          liveHits = (d.features || []).map((f) => {
+            const pr = f.properties || {}, kind = photonKind(pr);
+            const where = [pr.district || pr.city, pr.state, pr.country].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(", ");
+            return { type: "live", name: pr.name || (pr.street || "Unnamed"), kind: kind.label, zoom: kind.zoom, where, lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] };
+          }).filter((h) => { const k = h.name + "|" + h.kind + "|" + h.where; if (seen.has(k)) return false; seen.add(k); return true; });
+          liveStatus = "ok"; renderSuggest();
+        })
+        .catch((err) => { if (err.name === "AbortError") return; if (seq !== liveSeq) return; liveHits = []; liveStatus = "error"; renderSuggest(); });
+    }, 300);
+  }
+
+  function renderSuggest() {
+    const q = $("#q").value.trim();
+    if (!q) { sug.hidden = true; return; }
+    const all = [];
+    let html = "";
+    if (liveHits.length) {
+      html += '<div class="sg-head">Locations</div>';
+      liveHits.forEach((h) => { html += `<button data-i="${all.length}">📍 ${esc(h.name)} <small>${esc(h.kind)}${h.where ? " · " + esc(h.where) : ""}</small></button>`; all.push(h); });
+    }
+    if (localHits.length) {
+      html += '<div class="sg-head">Places in this demo</div>';
+      localHits.forEach((h) => { html += `<button data-i="${all.length}">${esc(h.p.name)} <small>${esc(CATEGORY[h.p.category] || "")} · ${esc(h.p.city)} · ${h.p.entries.length ? "has WiFi info" : "no WiFi info yet"}</small></button>`; all.push(h); });
+    }
+    if (liveStatus === "loading" && !liveHits.length) html += '<div class="sg-note">Searching locations…</div>';
+    if (liveStatus === "error") html += '<div class="sg-note">Live location search is not available now. Showing demo places only.</div>';
+    if (liveStatus === "ok" && !liveHits.length && !localHits.length) html += '<div class="sg-note">No results.</div>';
+    if (!html) { sug.hidden = true; return; }
+    sug.innerHTML = html; sug.hidden = false;
+    sug.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      const h = all[Number(b.dataset.i)]; sug.hidden = true; state.query = "";
+      if (h.type === "live") { $("#q").value = h.name; goTo(h.lat, h.lng, h.zoom); }
+      else { $("#q").value = h.p.name; refPoint = { lat: h.p.lat, lng: h.p.lng }; renderList(); select(h.p.id, true); }
+    }));
+  }
+
+  function updateSuggest() {
+    const raw = $("#q").value.trim(), q = raw.toLowerCase();
+    state.query = q; renderListIfNotDetail();
+    localHits = q ? places.filter((p) => p.name.toLowerCase().includes(q) || p.city.toLowerCase().includes(q)).slice(0, 4).map((p) => ({ type: "place", p })) : [];
+    liveHits = []; fetchLive(raw);
+    renderSuggest();
+  }
+  function renderListIfNotDetail() { if (state.selectedId == null) renderList(); }
+  function goTo(lat, lng, zoom) { refPoint = { lat, lng }; map.flyTo({ center: [lng, lat], zoom: zoom || 13 }); state.selectedId = null; renderList(); }
+  $("#q").addEventListener("input", updateSuggest);
+  document.addEventListener("click", (e) => { if (!e.target.closest(".search")) sug.hidden = true; });
+
+  // ---------- location ----------
+  $("#btn-locate").addEventListener("click", () => {
+    if (!navigator.geolocation) return fallbackLocate("Location is not available in this browser.");
+    toast("Asking for your location…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        placeMe(lat, lng);
+        const nearest = Math.min(...places.map((p) => haversine(lat, lng, p.lat, p.lng)));
+        if (nearest > 100) { toast("No demo places near you. The demo data covers Istanbul and Antalya."); return fallbackLocate(null, true); }
+        goTo(lat, lng, 14);
+      },
+      () => fallbackLocate("Location denied. Showing Istanbul instead."),
+      { timeout: 8000 }
+    );
+  });
+  function fallbackLocate(msg, keepMe) {
+    if (msg) toast(msg);
+    if (!keepMe && meMarker) { meMarker.remove(); meMarker = null; }
+    const c = window.MOCK_CITIES[0]; goTo(c.lat, c.lng, c.zoom);
+  }
+  function placeMe(lat, lng) {
+    if (meMarker) meMarker.remove();
+    const el = document.createElement("div"); el.className = "me";
+    meMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+  }
+
+  // ---------- filters + password switch ----------
+  document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
+    document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", String(x === c)));
+    state.filter = c.dataset.f;
+    markers.forEach((m, id) => { const p = places.find((x) => x.id === id); m.getElement().style.display = visiblePlaces().includes(p) ? "" : "none"; });
+    state.selectedId = null; renderList();
+  }));
+  $("#pw-switch").addEventListener("change", (e) => {
+    state.allowPw = e.target.checked;
+    if (state.selectedId != null) renderDetail(places.find((x) => x.id === state.selectedId));
+    toast(state.allowPw ? "Backend now sends passwords where the policy allows." : "Backend hides all passwords.");
+  });
+
+  // ---------- init ----------
+  // Do not wait for tiles: the list and pins must show even if the network is slow.
+  buildMarkers(); renderList();
+  map.on("error", () => { /* tile errors are shown by the blank map; ignore in demo */ });
+})();
+</script>
+</body>
+</html>
