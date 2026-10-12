@@ -24,6 +24,7 @@ interface Props {
   initial?: Partial<EntryFormValues>;
   onSubmit(v: EntryFormValues): void | Promise<void>;
   onClose(): void;
+  error?: string | null;
 }
 
 const EMPTY: EntryFormValues = {
@@ -33,7 +34,7 @@ const EMPTY: EntryFormValues = {
 
 const HEADINGS = { entry: "Add WiFi info", place: "Add a missing place", edit: "Edit WiFi info" } as const;
 
-export function EntryForm({ mode, title, initial, onSubmit, onClose }: Props) {
+export function EntryForm({ mode, title, initial, onSubmit, onClose, error }: Props) {
   const dlg = useRef<HTMLDialogElement>(null);
   const [v, setV] = useState<EntryFormValues>({ ...EMPTY, ...initial });
   const [busy, setBusy] = useState(false);
@@ -141,6 +142,8 @@ export function EntryForm({ mode, title, initial, onSubmit, onClose }: Props) {
         <div className="hp" aria-hidden="true">
           <label>Website <input type="text" tabIndex={-1} autoComplete="off" value={v.website} onChange={(e) => set("website", e.target.value)} /></label>
         </div>
+
+        {error && <div className="warn" role="alert">{error}</div>}
 
         <div className="actions">
           <button type="button" className="btn" onClick={() => dlg.current?.close()}>Cancel</button>

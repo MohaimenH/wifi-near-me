@@ -47,6 +47,7 @@ export function App() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [pickMode, setPickMode] = useState(false);
   const [form, setForm] = useState<FormState | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [myVotes, setMyVotes] = useState<Record<number, "works" | "broken">>({});
   const [reported, setReported] = useState<Record<number, boolean>>({});
@@ -125,6 +126,7 @@ export function App() {
 
   const startEdit = (e: PublicEntry) => {
     if (!detail) return;
+    setFormError(null);
     setForm({
       mode: "edit", entryId: e.id, placeId: detail.id, placeName: detail.name,
       initial: { label: e.label, access_type: e.access_type, steps_text: e.steps_text, language: e.language },
@@ -133,6 +135,7 @@ export function App() {
 
   const submitForm = async (v: EntryFormValues) => {
     if (!form) return;
+    setFormError(null);
     try {
       if (form.mode === "place") {
         const r = await postPlace({
@@ -154,7 +157,7 @@ export function App() {
         await select(form.placeId, false);
       }
       showToast("Saved. Thank you for helping other travelers.");
-    } catch (e) { showToast(messageFor(e)); }
+    } catch (e) { setFormError(messageFor(e)); }
   };
 
   const visible = places.filter((p) => {
@@ -200,7 +203,7 @@ export function App() {
               myVotes={myVotes}
               reported={reported}
               onBack={() => { setSelectedId(null); setDetail(null); }}
-              onAddEntry={() => setForm({ mode: "entry", placeId: detail.id, placeName: detail.name })}
+              onAddEntry={() => { setFormError(null); setForm({ mode: "entry", placeId: detail.id, placeName: detail.name }); }}
               onEdit={startEdit}
               onVote={vote}
               onReport={report}
@@ -224,7 +227,7 @@ export function App() {
           pickMode={pickMode}
           onSelect={(id) => select(id)}
           onMoveEnd={onMoveEnd}
-          onPick={(p) => setForm({ mode: "place", lat: p.lat, lng: p.lng })}
+          onPick={(p) => { setFormError(null); setForm({ mode: "place", lat: p.lat, lng: p.lng }); }}
         />
         {pickMode && (
           <div className="mode-banner">
@@ -243,8 +246,9 @@ export function App() {
           mode={form.mode}
           title={formTitle}
           initial={form.mode === "edit" ? form.initial : undefined}
+          error={formError}
           onSubmit={submitForm}
-          onClose={() => { if (form.mode === "place") setPickMode(false); setForm(null); }}
+          onClose={() => { setFormError(null); if (form.mode === "place") setPickMode(false); setForm(null); }}
         />
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
