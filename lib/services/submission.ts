@@ -56,6 +56,19 @@ export function createSubmissionService(deps: Deps) {
     return row.id as number;
   }
 
+  /**
+   * Many devices on one IP may each vote or report, but at most cfg.perIpEntryCap new ones per entry.
+   * A device that already has a row may always change it. Call inside a transaction.
+   */
+  async function capPerIp(tx: Sql, table: "votes" | "reports", entryId: number, actor: Actor): Promise<void> {
+    // One lock per table, entry, and IP, so parallel requests cannot all pass the count check.
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`${table}|${entryId}|${actor.ipHash}`}))`;
+    const own = await tx`SELECT 1 FROM ${tx(table)} WHERE wifi_entry_id = ${entryId} AND device_hash = ${actor.deviceHash}`;
+    if (own.length > 0) return;
+    const [{ n }] = await tx`SELECT count(*) AS n FROM ${tx(table)} WHERE wifi_entry_id = ${entryId} AND ip_hash = ${actor.ipHash}`;
+    if ((n as number) >= cfg.perIpEntryCap) throw new RateLimitedError();
+  }
+
   async function activeEntryExists(entryId: number): Promise<boolean> {
     return (await sql`SELECT 1 FROM wifi_entries WHERE id = ${entryId} AND status = 'active'`).length > 0;
   }
@@ -130,11 +143,15 @@ export function createSubmissionService(deps: Deps) {
       const kind = voteKindSchema.parse(rawKind);
       await limit(actor, "vote");
       if (!(await activeEntryExists(entryId))) throw new NotFoundError();
-      await sql`
-        INSERT INTO votes (wifi_entry_id, device_hash, ip_hash, kind)
-        VALUES (${entryId}, ${actor.deviceHash}, ${actor.ipHash}, ${kind})
-        ON CONFLICT (wifi_entry_id, device_hash)
-        DO UPDATE SET kind = EXCLUDED.kind, ip_hash = EXCLUDED.ip_hash, created_at = now()`;
+      await sql.begin(async (tx0) => {
+        const tx = tx0 as unknown as Sql;
+        await capPerIp(tx, "votes", entryId, actor);
+        await tx`
+          INSERT INTO votes (wifi_entry_id, device_hash, ip_hash, kind)
+          VALUES (${entryId}, ${actor.deviceHash}, ${actor.ipHash}, ${kind})
+          ON CONFLICT (wifi_entry_id, device_hash)
+          DO UPDATE SET kind = EXCLUDED.kind, ip_hash = EXCLUDED.ip_hash, created_at = now()`;
+      });
       const [c] = await sql`
         SELECT count(*) FILTER (WHERE kind = 'works') AS works, count(*) FILTER (WHERE kind = 'broken') AS broken
         FROM votes WHERE wifi_entry_id = ${entryId}`;
@@ -146,14 +163,19 @@ export function createSubmissionService(deps: Deps) {
       const reason = reportReasonSchema.parse(rawReason);
       await limit(actor, "report");
       if (!(await activeEntryExists(entryId))) throw new NotFoundError();
-      await sql`
-        INSERT INTO reports (wifi_entry_id, device_hash, ip_hash, reason)
-        VALUES (${entryId}, ${actor.deviceHash}, ${actor.ipHash}, ${reason})
-        ON CONFLICT (wifi_entry_id, device_hash) DO NOTHING`;
-      const [{ devices, ips }] = await sql`
-        SELECT count(DISTINCT device_hash) AS devices, count(DISTINCT ip_hash) AS ips
+      await sql.begin(async (tx0) => {
+        const tx = tx0 as unknown as Sql;
+        await capPerIp(tx, "reports", entryId, actor);
+        await tx`
+          INSERT INTO reports (wifi_entry_id, device_hash, ip_hash, ip_group_hash, reason)
+          VALUES (${entryId}, ${actor.deviceHash}, ${actor.ipHash}, ${actor.ipGroupHash}, ${reason})
+          ON CONFLICT (wifi_entry_id, device_hash) DO NOTHING`;
+      });
+      // Older rows have no group and fall back to their IP hash.
+      const [{ devices, groups }] = await sql`
+        SELECT count(DISTINCT device_hash) AS devices, count(DISTINCT COALESCE(ip_group_hash, ip_hash)) AS groups
         FROM reports WHERE wifi_entry_id = ${entryId}`;
-      const hide = (devices as number) >= cfg.reportHideThreshold && (ips as number) >= cfg.reportHideMinIps;
+      const hide = (devices as number) >= cfg.reportHideThreshold && (groups as number) >= cfg.reportHideMinIps;
       if (hide) {
         await sql`UPDATE wifi_entries SET status = 'hidden', updated_at = now() WHERE id = ${entryId} AND status = 'active'`;
       }

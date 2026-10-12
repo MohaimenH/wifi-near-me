@@ -17,6 +17,8 @@ export type EntryStatus = "active" | "pending" | "hidden";
 export interface Actor {
   /** sha256(salt|ip). IPv6 is grouped by /64. Used for rate limits and abuse checks. */
   ipHash: string;
+  /** sha256(salt|network group): IPv4 /24, IPv6 /48. Auto-hide counts distinct groups, so one network counts once. */
+  ipGroupHash: string;
   /** sha256(salt|device cookie). One browser. Votes and reports count once per device. */
   deviceHash: string;
   /** Null for anonymous writes. Filled from the session when accounts exist. */

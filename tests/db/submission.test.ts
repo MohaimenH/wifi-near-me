@@ -15,7 +15,8 @@ afterAll(() => sql.end());
 beforeEach(() => resetDb(sql));
 
 const svc = () => createSubmissionService({ sql, guard: anonymousGuard });
-const actor = (device = "dev-1", ip = "ip-1"): Actor => ({ ipHash: ip, deviceHash: device, userId: null });
+const actor = (device = "dev-1", ip = "ip-1", group = ip): Actor =>
+  ({ ipHash: ip, ipGroupHash: group, deviceHash: device, userId: null });
 const entry = { access_type: "password", steps_text: "Ask the staff.", label: "Guest" };
 const tight = (key: keyof typeof LIMITS, limit: number) =>
   createSubmissionService({ sql, guard: anonymousGuard, limits: { ...LIMITS, [key]: { limit, windowSeconds: 3600 } } });
@@ -205,6 +206,25 @@ describe("castVote", () => {
     expect(await svc().castVote(actor("b", "ip"), entryId, "works")).toEqual({ works: 1, broken: 1 });
   });
 
+  it("caps new votes per IP per entry, but lets a device that already voted change its vote", async () => {
+    const entryId = await insertEntry(sql, await insertPlace(sql));
+    const s = createSubmissionService({ sql, guard: anonymousGuard, cfg: { ...config(), perIpEntryCap: 2 } });
+    await s.castVote(actor("a", "busy-ip"), entryId, "works");
+    await s.castVote(actor("b", "busy-ip"), entryId, "works");
+    await expect(s.castVote(actor("c", "busy-ip"), entryId, "works")).rejects.toBeInstanceOf(RateLimitedError);
+    expect(await s.castVote(actor("a", "busy-ip"), entryId, "broken")).toEqual({ works: 1, broken: 1 });
+    expect(await s.castVote(actor("d", "other-ip"), entryId, "works")).toEqual({ works: 2, broken: 1 });
+  });
+
+  it("lets exactly the cap of parallel new votes from one IP pass", async () => {
+    const entryId = await insertEntry(sql, await insertPlace(sql));
+    const s = createSubmissionService({ sql, guard: anonymousGuard, cfg: { ...config(), perIpEntryCap: 3 } });
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, i) => s.castVote(actor(`p${i}`, "burst-ip"), entryId, "works")),
+    );
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(3);
+  });
+
   it("rejects an unknown kind and an unknown or hidden entry", async () => {
     const placeId = await insertPlace(sql);
     const entryId = await insertEntry(sql, placeId);
@@ -238,6 +258,33 @@ describe("reportEntry", () => {
     expect(await svc().reportEntry(actor("b", "ip-1"), id, "wrong")).toEqual({ hidden: false });
     expect(await svc().reportEntry(actor("c", "ip-2"), id, "wrong")).toEqual({ hidden: true });
     expect(await status(id)).toBe("hidden");
+  });
+
+  it("does not hide when the reporting IPs all sit in one network group", async () => {
+    const id = await insertEntry(sql, await insertPlace(sql));
+    for (const [d, ip] of [["a", "ip-1"], ["b", "ip-2"], ["c", "ip-3"]]) {
+      expect(await svc().reportEntry(actor(d, ip, "group-1"), id, "wrong")).toEqual({ hidden: false });
+    }
+    expect(await status(id)).toBe("active");
+    expect(await svc().reportEntry(actor("d", "ip-4", "group-2"), id, "wrong")).toEqual({ hidden: true });
+  });
+
+  it("caps new reports per IP per entry, and a repeat report from the same device still succeeds", async () => {
+    const id = await insertEntry(sql, await insertPlace(sql));
+    const s = createSubmissionService({ sql, guard: anonymousGuard, cfg: { ...config(), perIpEntryCap: 2 } });
+    await s.reportEntry(actor("a", "busy-ip"), id, "x");
+    await s.reportEntry(actor("b", "busy-ip"), id, "x");
+    await expect(s.reportEntry(actor("c", "busy-ip"), id, "x")).rejects.toBeInstanceOf(RateLimitedError);
+    await expect(s.reportEntry(actor("a", "busy-ip"), id, "x")).resolves.toEqual({ hidden: false });
+    const [{ n }] = await sql`SELECT count(*) AS n FROM reports WHERE wifi_entry_id = ${id}`;
+    expect(n).toBe(2);
+  });
+
+  it("stores the network group with each report", async () => {
+    const id = await insertEntry(sql, await insertPlace(sql));
+    await svc().reportEntry(actor("a", "ip-1", "group-9"), id, "x");
+    const [r] = await sql`SELECT ip_group_hash FROM reports WHERE wifi_entry_id = ${id}`;
+    expect(r.ip_group_hash).toBe("group-9");
   });
 
   it("throws NotFoundError for an unknown entry", async () => {

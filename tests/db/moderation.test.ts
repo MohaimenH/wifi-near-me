@@ -14,7 +14,7 @@ afterAll(() => sql.end());
 beforeEach(() => resetDb(sql));
 
 const svc = () => createSubmissionService({ sql, guard: anonymousGuard });
-const actor = (d: string, ip = "ip-1"): Actor => ({ ipHash: ip, deviceHash: d, userId: null });
+const actor = (d: string, ip = "ip-1"): Actor => ({ ipHash: ip, ipGroupHash: ip, deviceHash: d, userId: null });
 const entry = { access_type: "password", steps_text: "Original steps.", label: "Guest" };
 const statusOf = async (id: number) => (await sql`SELECT status FROM wifi_entries WHERE id = ${id}`)[0].status;
 

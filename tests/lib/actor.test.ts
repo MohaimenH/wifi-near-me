@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEVICE_COOKIE, hashWithSalt, ipKey, readCookie, resolveActor } from "@/lib/actor";
+import { DEVICE_COOKIE, hashWithSalt, ipGroupKey, ipKey, readCookie, resolveActor } from "@/lib/actor";
 
 const req = (headers: Record<string, string> = {}) => new Request("http://x/", { headers });
 const GOOD_ID = "A".repeat(43);
@@ -14,6 +14,17 @@ describe("ipKey", () => {
     ["::1", "0:0:0:0::/64"],
     ["[2001:db8:1:2::9]", "2001:db8:1:2::/64"],
   ])("%s -> %s", (ip, key) => expect(ipKey(ip)).toBe(key));
+});
+
+describe("ipGroupKey", () => {
+  it.each([
+    ["1.2.3.4", "1.2.3.0/24"],
+    ["::ffff:1.2.3.99", "1.2.3.0/24"],
+    ["2001:db8:1:2::1", "2001:db8:1::/48"],
+    ["2001:0db8:0001:ffff:1:2:3:4", "2001:db8:1::/48"],
+    ["::1", "0:0:0::/48"],
+    ["unknown", "unknown"],
+  ])("%s -> %s", (ip, key) => expect(ipGroupKey(ip)).toBe(key));
 });
 
 describe("readCookie", () => {
@@ -54,5 +65,13 @@ describe("resolveActor", () => {
     const b = resolveActor(req({ "x-forwarded-for": "2001:db8:1:2::ffff" })).actor;
     expect(a.ipHash).toBe(b.ipHash);
     expect(a.ipHash).not.toContain("2001");
+  });
+
+  it("gives two IPs in one network group the same ipGroupHash but different ipHash", () => {
+    const a = resolveActor(req({ "x-forwarded-for": "5.6.7.8" })).actor;
+    const b = resolveActor(req({ "x-forwarded-for": "5.6.7.200" })).actor;
+    expect(a.ipGroupHash).toBe(hashWithSalt("ipgroup", "5.6.7.0/24", "test-salt"));
+    expect(a.ipGroupHash).toBe(b.ipGroupHash);
+    expect(a.ipHash).not.toBe(b.ipHash);
   });
 });

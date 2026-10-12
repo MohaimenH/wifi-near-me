@@ -4,7 +4,10 @@ export interface Config {
   exposePasswords: boolean;
   newEntryStatus: EntryStatus;
   reportHideThreshold: number;
+  /** Auto-hide also needs reports from this many network groups (IPv4 /24, IPv6 /48). */
   reportHideMinIps: number;
+  /** New votes, and new reports, that one IP may add to one entry. */
+  perIpEntryCap: number;
   actorSalt: string;
 }
 
@@ -20,7 +23,8 @@ export function config(): Config {
     exposePasswords: process.env.EXPOSE_PASSWORDS === "true",
     newEntryStatus: process.env.NEW_ENTRY_STATUS === "pending" ? "pending" : "active",
     reportHideThreshold: Number(process.env.REPORT_HIDE_THRESHOLD ?? 3) || 3,
-    reportHideMinIps: Number(process.env.REPORT_HIDE_MIN_IPS ?? 2) || 2,
+    reportHideMinIps: Number(process.env.REPORT_HIDE_MIN_IPS ?? 3) || 3,
+    perIpEntryCap: Number(process.env.PER_IP_ENTRY_CAP ?? 5) || 5,
     actorSalt: salt,
   };
 }

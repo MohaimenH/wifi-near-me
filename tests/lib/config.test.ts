@@ -3,6 +3,19 @@ import { config } from "@/lib/config";
 
 afterEach(() => vi.unstubAllEnvs());
 
+describe("config abuse defaults", () => {
+  it("needs 3 network groups to auto-hide and allows 5 votes or reports per IP per entry when unset", () => {
+    vi.stubEnv("REPORT_HIDE_MIN_IPS", undefined);
+    vi.stubEnv("PER_IP_ENTRY_CAP", undefined);
+    expect(config()).toMatchObject({ reportHideMinIps: 3, perIpEntryCap: 5 });
+  });
+
+  it("reads PER_IP_ENTRY_CAP from the environment", () => {
+    vi.stubEnv("PER_IP_ENTRY_CAP", "8");
+    expect(config().perIpEntryCap).toBe(8);
+  });
+});
+
 describe("config ACTOR_SALT", () => {
   it("refuses the example placeholder and a short salt in production", () => {
     vi.stubEnv("NODE_ENV", "production");

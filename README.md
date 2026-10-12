@@ -31,7 +31,8 @@ To review every new entry before it shows, set `NEW_ENTRY_STATUS=pending` and ap
 ## Abuse controls
 - Rate limits are per IP (IPv6 grouped by /64) and generous, because travelers share IPs at airports and hotels.
 - Votes and reports count once per browser (cookie `wnm_device`).
-- An entry is hidden automatically only after reports from `REPORT_HIDE_THRESHOLD` browsers on at least `REPORT_HIDE_MIN_IPS` different IPs.
+- One IP can add at most `PER_IP_ENTRY_CAP` (default 5) new votes, and 5 new reports, to one entry. A browser that already voted can still change its vote. This stops a script that drops its cookie from adding hundreds of votes.
+- An entry is hidden automatically only after reports from `REPORT_HIDE_THRESHOLD` browsers in at least `REPORT_HIDE_MIN_IPS` (default 3) different network groups. A group is an IPv4 /24 or an IPv6 /48, so many addresses from one network count once.
 - Writes require a same-origin JSON request.
 - IP detection trusts `x-forwarded-for`. Vercel sets this header itself. Behind another proxy, confirm that the proxy overwrites it.
 
@@ -40,7 +41,7 @@ To review every new entry before it shows, set `NEW_ENTRY_STATUS=pending` and ap
 - Enable PostGIS from the Supabase dashboard before migrating (it installs into the `extensions` schema); confirm `ST_*` calls work (open item 1).
 - Run `npm run db:migrate` with the direct (or session) connection string, not the transaction pooler.
 - Use the Supabase transaction pooler connection string for `DATABASE_URL` and set `DB_PREPARE=false`.
-- Set on Vercel: `DATABASE_URL`, `DB_PREPARE`, `ACTOR_SALT` (long random value, required in production), `EXPOSE_PASSWORDS`, `NEW_ENTRY_STATUS`, `REPORT_HIDE_THRESHOLD`, `REPORT_HIDE_MIN_IPS`, `PHOTON_URL`, `CONTACT_EMAIL`, `NEXT_PUBLIC_TILE_STYLE_URL`.
+- Set on Vercel: `DATABASE_URL`, `DB_PREPARE`, `ACTOR_SALT` (long random value, required in production), `EXPOSE_PASSWORDS`, `NEW_ENTRY_STATUS`, `REPORT_HIDE_THRESHOLD`, `REPORT_HIDE_MIN_IPS` (3), `PER_IP_ENTRY_CAP` (5), `PHOTON_URL`, `CONTACT_EMAIL`, `NEXT_PUBLIC_TILE_STYLE_URL`.
 - `NEXT_PUBLIC_TILE_STYLE_URL` and `CONTACT_EMAIL` are fixed at build time (the legal pages are static). Rebuild after changing them.
 - Geocoder: the public Photon server has no guaranteed capacity. If search gets throttled, self-host Photon or use a paid geocoder and change `PHOTON_URL` (the response format must match Photon, or `lib/geocode.ts` must be adapted).
 
