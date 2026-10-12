@@ -1,3 +1,5 @@
+import { App } from "@/components/App";
+
 export default function Page() {
-  return <main style={{ padding: 24 }}>WiFi Near Me: setup in progress</main>;
+  return <App />;
 }
