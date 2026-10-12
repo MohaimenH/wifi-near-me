@@ -2,6 +2,11 @@ import type { Sql } from "@/lib/db";
 import type { EntryRow } from "@/lib/serializers/wifiEntry";
 import type { Category, PlaceSummary } from "@/lib/types";
 
+/*
+ * Places shown to users: every OSM place, but a user place only while it has an active entry.
+ * So hiding or reporting the only entry of a user place also hides the place, and a pending user place stays hidden.
+ */
+
 export async function findNearby(
   sql: Sql,
   q: { lat: number; lng: number; radius_m: number; limit: number },
@@ -16,6 +21,7 @@ export async function findNearby(
            (SELECT count(*) FROM wifi_entries e WHERE e.place_id = p.id AND e.status = 'active') AS entry_count
     FROM places p, origin o
     WHERE ST_DWithin(p.geom, o.g, ${q.radius_m}::float8)
+      AND (p.source = 'osm' OR EXISTS (SELECT 1 FROM wifi_entries e WHERE e.place_id = p.id AND e.status = 'active'))
     ORDER BY distance_m
     LIMIT ${q.limit}`;
   return rows.map((r) => ({
@@ -26,8 +32,10 @@ export async function findNearby(
 
 export async function getPlaceRow(sql: Sql, id: number) {
   const [row] = await sql`
-    SELECT id, name, category, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lng, source
-    FROM places WHERE id = ${id}`;
+    SELECT p.id, p.name, p.category, ST_Y(p.geom::geometry) AS lat, ST_X(p.geom::geometry) AS lng, p.source
+    FROM places p
+    WHERE p.id = ${id}
+      AND (p.source = 'osm' OR EXISTS (SELECT 1 FROM wifi_entries e WHERE e.place_id = p.id AND e.status = 'active'))`;
   if (!row) return null;
   return row as { id: number; name: string; category: Category; lat: number; lng: number; source: "osm" | "user" };
 }

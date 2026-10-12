@@ -39,6 +39,29 @@ describe("findNearby", () => {
   });
 });
 
+describe("user places", () => {
+  const near = { lat: 41.0086, lng: 28.9795, radius_m: 3000, limit: 100 };
+
+  it("hides a user place whose only entry is hidden or pending", async () => {
+    const hidden = await insertPlace(sql, { name: "User Hidden", source: "user", osm_id: null });
+    await insertEntry(sql, hidden, { status: "hidden" });
+    const pending = await insertPlace(sql, { name: "User Pending", source: "user", osm_id: null });
+    await insertEntry(sql, pending, { status: "pending" });
+    expect(await findNearby(sql, near)).toEqual([]);
+    expect(await getPlaceRow(sql, hidden)).toBeNull();
+    expect(await getPlaceRow(sql, pending)).toBeNull();
+  });
+
+  it("shows a user place with an active entry and an OSM place with no entries", async () => {
+    const user = await insertPlace(sql, { name: "User Active", source: "user", osm_id: null });
+    await insertEntry(sql, user, { status: "active" });
+    const osm = await insertPlace(sql, { name: "OSM Empty", lat: 41.0090 });
+    expect((await findNearby(sql, near)).map((r) => r.id)).toEqual([user, osm]);
+    expect(await getPlaceRow(sql, user)).toMatchObject({ id: user, source: "user" });
+    expect(await getPlaceRow(sql, osm)).toMatchObject({ id: osm, source: "osm" });
+  });
+});
+
 describe("place detail", () => {
   it("returns null for an unknown id", async () => {
     expect(await getPlaceRow(sql, 12345)).toBeNull();

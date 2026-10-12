@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createSql } from "@/lib/db";
-import { listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus } from "@/lib/moderation";
+import {
+  deleteUserPlace, listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus,
+} from "@/lib/moderation";
 import { anonymousGuard } from "@/lib/services/guard";
 import { createSubmissionService } from "@/lib/services/submission";
 import type { Actor } from "@/lib/types";
@@ -79,6 +81,19 @@ describe("moderation", () => {
     const otherRev = (await listRevisions(sql, other.entry_id))[0];
     expect(await revertTo(sql, r.entry_id, otherRev.id)).toBe("not_found");
     expect(await revertTo(sql, 9999, first.id)).toBe("not_found");
+  });
+
+  it("deletes a user place with its entries, but not an OSM place or an unknown id", async () => {
+    const user = await insertPlace(sql, { source: "user", osm_id: null });
+    const userEntry = await insertEntry(sql, user);
+    const osm = await insertPlace(sql);
+    await insertEntry(sql, osm);
+    expect(await deleteUserPlace(sql, user)).toBe(true);
+    expect(await sql`SELECT 1 FROM places WHERE id = ${user}`).toHaveLength(0);
+    expect(await sql`SELECT 1 FROM wifi_entries WHERE id = ${userEntry}`).toHaveLength(0);
+    expect(await deleteUserPlace(sql, osm)).toBe(false);
+    expect(await sql`SELECT 1 FROM places WHERE id = ${osm}`).toHaveLength(1);
+    expect(await deleteUserPlace(sql, 9999)).toBe(false);
   });
 
   it("reports no_previous and not_found", async () => {

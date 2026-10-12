@@ -1,6 +1,8 @@
 import { config } from "dotenv";
 import { createSql } from "../lib/db";
-import { listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus } from "../lib/moderation";
+import {
+  deleteUserPlace, listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus,
+} from "../lib/moderation";
 import type { EntryStatus } from "../lib/types";
 
 config();
@@ -11,7 +13,8 @@ const USAGE = `Usage:
   npm run moderate -- hide <entryId>        set status to hidden
   npm run moderate -- restore <entryId>     set active and delete its reports
   npm run moderate -- history <entryId>     show revisions (passwords masked)
-  npm run moderate -- revert <entryId> [revisionId]   go back to the previous revision, or to a revision id from history`;
+  npm run moderate -- revert <entryId> [revisionId]   go back to the previous revision, or to a revision id from history
+  npm run moderate -- delete-place <placeId>          delete a place that a user added, with its entries`;
 
 const [cmd, ...args] = process.argv.slice(2);
 const url = process.env.DATABASE_URL;
@@ -53,6 +56,9 @@ try {
       console.log(args[1] === undefined
         ? await revertToPrevious(sql, idArg())
         : await revertTo(sql, idArg(), idArg(1)));
+      break;
+    case "delete-place":
+      console.log((await deleteUserPlace(sql, idArg())) ? "deleted" : "not found (or not a user place)");
       break;
     default:
       console.error(USAGE);

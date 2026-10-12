@@ -39,6 +39,12 @@ export async function restoreEntry(sql: Sql, id: number): Promise<boolean> {
   });
 }
 
+/** Deletes a place that a user added, with its entries (cascade). Returns false for unknown ids and OSM places. */
+export async function deleteUserPlace(sql: Sql, placeId: number): Promise<boolean> {
+  const rows = await sql`DELETE FROM places WHERE id = ${placeId} AND source = 'user' RETURNING id`;
+  return rows.length > 0;
+}
+
 export async function listRevisions(sql: Sql, id: number) {
   const rows = await sql`
     SELECT id, created_at, device_hash, submitter_id, snapshot
