@@ -24,7 +24,7 @@ export function categoryFor(tags: Record<string, string>): Category | null {
     case "guest_house": return "hotel";
     case "hostel": return "hostel";
   }
-  if (tags.aeroway === "aerodrome") return "airport";
+  if (tags.aeroway === "aerodrome" || tags.aeroway === "terminal") return "airport";
   if (tags.railway === "station") return "station";
   return null;
 }

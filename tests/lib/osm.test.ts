@@ -6,7 +6,7 @@ describe("categoryFor", () => {
     [{ amenity: "cafe" }, "cafe"], [{ amenity: "bar" }, "restaurant"], [{ amenity: "restaurant" }, "restaurant"],
     [{ amenity: "library" }, "library"], [{ amenity: "coworking_space" }, "coworking"],
     [{ tourism: "hotel" }, "hotel"], [{ tourism: "guest_house" }, "hotel"], [{ tourism: "hostel" }, "hostel"],
-    [{ aeroway: "aerodrome" }, "airport"], [{ railway: "station" }, "station"],
+    [{ aeroway: "aerodrome" }, "airport"], [{ aeroway: "terminal" }, "airport"], [{ railway: "station" }, "station"],
   ])("maps %j to %s", (tags, expected) => {
     expect(categoryFor(tags as Record<string, string>)).toBe(expected);
   });
