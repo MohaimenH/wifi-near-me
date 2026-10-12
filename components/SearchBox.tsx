@@ -33,7 +33,9 @@ export function SearchBox({ places, center, onQueryChange, onPickLocation, onPic
     const ctl = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        setLive(await fetchGeocode(text, centerRef.current, ctl.signal));
+        const r = await fetchGeocode(text, centerRef.current, ctl.signal);
+        if (ctl.signal.aborted) return;
+        setLive(r ?? []);
         setStatus("ok");
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
