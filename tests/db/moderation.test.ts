@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createSql } from "@/lib/db";
 import {
-  deleteUserPlace, listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus,
+  deleteUserPlace, listForReview, listRevisions, purgePassword, restoreEntry, revertTo, revertToPrevious, setStatus,
 } from "@/lib/moderation";
 import { anonymousGuard } from "@/lib/services/guard";
 import { createSubmissionService } from "@/lib/services/submission";
@@ -94,6 +94,30 @@ describe("moderation", () => {
     expect(await deleteUserPlace(sql, osm)).toBe(false);
     expect(await sql`SELECT 1 FROM places WHERE id = ${osm}`).toHaveLength(1);
     expect(await deleteUserPlace(sql, 9999)).toBe(false);
+  });
+
+  it("purges a password from the entry and from every old revision, so a revert cannot bring it back", async () => {
+    const r = await svc().submitEntry(actor("x"), await insertPlace(sql), { ...entry, password: "old-secret", password_is_public: true });
+    if (r.ignored) throw new Error("unexpected");
+    await svc().editEntry(actor("x"), r.entry_id, { ...entry, password: "new-secret" });
+    expect(await purgePassword(sql, r.entry_id)).toEqual({ status: "purged", stepsHadPassword: false });
+    const [e] = await sql`SELECT password, password_policy FROM wifi_entries WHERE id = ${r.entry_id}`;
+    expect(e).toMatchObject({ password: null, password_policy: "none" });
+    const snapshots = await sql`SELECT snapshot FROM wifi_entry_revisions WHERE wifi_entry_id = ${r.entry_id}`;
+    expect(JSON.stringify(snapshots)).not.toContain("secret");
+    const revs = await listRevisions(sql, r.entry_id);
+    expect(revs[0]).toMatchObject({ submitter_id: "moderator" });
+    expect(await revertTo(sql, r.entry_id, revs.at(-1)!.id)).toBe("reverted");
+    expect((await sql`SELECT password FROM wifi_entries WHERE id = ${r.entry_id}`)[0].password).toBeNull();
+  });
+
+  it("warns when the steps still contain a purged password, and reports not_found for an unknown entry", async () => {
+    const r = await svc().submitEntry(actor("x"), await insertPlace(sql), {
+      ...entry, steps_text: "The code is CafeGuest2026.", password: "CafeGuest2026",
+    });
+    if (r.ignored) throw new Error("unexpected");
+    expect(await purgePassword(sql, r.entry_id)).toEqual({ status: "purged", stepsHadPassword: true });
+    expect(await purgePassword(sql, 9999)).toEqual({ status: "not_found" });
   });
 
   it("reports no_previous and not_found", async () => {

@@ -24,6 +24,8 @@ Crowdsourced map of how to connect to WiFi in cafes, hotels, airports, and more.
 `npm run moderate -- list` shows hidden and pending entries. Other commands: `approve`, `hide`, `restore`, `history` (each takes an entry id).
 `revert <entryId> [revisionId]` goes back to the previous revision, or to a revision id from `history`.
 `delete-place <placeId>` deletes a place that a user added, with its entries. It does not delete OpenStreetMap places.
+`purge-password <entryId>` removes the password from the entry and from all its old revisions (for takedown requests). If the steps text also contains the password, the tool says so: hide the entry or edit its steps. Database backups keep old copies until they expire.
+When a user ticks "Remove the saved password", the password is also removed from the old revisions.
 To review every new entry before it shows, set `NEW_ENTRY_STATUS=pending` and approve entries with the tool.
 
 ## Abuse controls

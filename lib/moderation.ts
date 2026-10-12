@@ -1,4 +1,6 @@
 import type { Sql } from "./db";
+import { stepsContainPassword } from "./form-checks";
+import { clearRevisionPasswords } from "./repo/revisions";
 import type { EntryStatus } from "./types";
 
 /** Moderator operations. Used only by scripts/moderate.ts. Never exposed over HTTP. */
@@ -81,6 +83,34 @@ export async function revertToPrevious(sql: Sql, id: number): Promise<"reverted"
     if (revs.length < 2) return "no_previous" as const;
     await applySnapshot(tx, id, revs[1].snapshot as Snapshot);
     return "reverted" as const;
+  });
+}
+
+/**
+ * Removes the password from the entry and from every old revision (for takedown requests), and records that
+ * as a new revision by "moderator". stepsHadPassword is true when the steps text still contains a removed
+ * password: then the moderator must hide the entry or have its steps edited.
+ */
+export async function purgePassword(
+  sql: Sql,
+  id: number,
+): Promise<{ status: "purged"; stepsHadPassword: boolean } | { status: "not_found" }> {
+  return sql.begin(async (tx0) => {
+    const tx = tx0 as unknown as Sql;
+    const [e] = await tx`
+      SELECT label, access_type, steps_text, language, password FROM wifi_entries WHERE id = ${id} FOR UPDATE`;
+    if (!e) return { status: "not_found" as const };
+    const old = await tx`
+      SELECT DISTINCT snapshot->>'password' AS password FROM wifi_entry_revisions
+      WHERE wifi_entry_id = ${id} AND snapshot->>'password' IS NOT NULL`;
+    const removed = [e.password as string | null, ...old.map((r) => r.password as string)].filter((p): p is string => !!p);
+    const stepsHadPassword = removed.some((p) => stepsContainPassword(e.steps_text as string, p));
+    await clearRevisionPasswords(tx, id);
+    await applySnapshot(tx, id, {
+      label: e.label, access_type: e.access_type, steps_text: e.steps_text, language: e.language,
+      password: null, password_policy: "none",
+    });
+    return { status: "purged" as const, stepsHadPassword };
   });
 }
 

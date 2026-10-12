@@ -137,6 +137,21 @@ describe("editEntry", () => {
       .toMatchObject({ password: null, password_policy: "none" });
   });
 
+  it("removes the password from old revisions too when password_clear is sent", async () => {
+    const id = await created({ password: "old-secret", password_is_public: true });
+    await svc().editEntry(actor(), id, { ...entry, password_clear: true });
+    const revs = await sql`SELECT snapshot FROM wifi_entry_revisions WHERE wifi_entry_id = ${id}`;
+    expect(revs).toHaveLength(2);
+    expect(JSON.stringify(revs)).not.toContain("old-secret");
+  });
+
+  it("keeps old revisions unchanged when a new password replaces the old one", async () => {
+    const id = await created({ password: "first-pw" });
+    await svc().editEntry(actor(), id, { ...entry, password: "second-pw" });
+    const [first] = await sql`SELECT snapshot FROM wifi_entry_revisions WHERE wifi_entry_id = ${id} ORDER BY id LIMIT 1`;
+    expect(first.snapshot.password).toBe("first-pw");
+  });
+
   it("refuses unknown and hidden entries and writes no revision", async () => {
     const placeId = await insertPlace(sql);
     const hiddenId = await insertEntry(sql, placeId, { status: "hidden" });

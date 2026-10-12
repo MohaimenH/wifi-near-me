@@ -2,6 +2,7 @@ import { config, type Config } from "@/lib/config";
 import type { Sql } from "@/lib/db";
 import { NotFoundError, RateLimitedError } from "@/lib/errors";
 import { consume, LIMITS, type Limits } from "@/lib/rate-limit";
+import { clearRevisionPasswords } from "@/lib/repo/revisions";
 import type { AccessType, Actor, EntryStatus, Language, PasswordPolicy } from "@/lib/types";
 import {
   entryEditSchema, entryInputSchema, placeInputSchema, reportReasonSchema, voteKindSchema, type EntryInput,
@@ -99,6 +100,8 @@ export function createSubmissionService(deps: Deps) {
               language = ${c.language}, password = ${c.password}, password_policy = ${c.password_policy},
               updated_at = clock_timestamp()
           WHERE id = ${entryId}`;
+        // "Remove the saved password" must also remove the copies in the edit history.
+        if (e.password_clear) await clearRevisionPasswords(tx, entryId);
         await writeRevision(tx, entryId, c, actor);
       });
       return { ignored: false as const, entry_id: entryId };
