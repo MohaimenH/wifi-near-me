@@ -1,6 +1,6 @@
 "use client";
 
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 import { haversineM } from "@/lib/geo";
@@ -30,6 +30,8 @@ export function MapView(props: MapViewProps) {
 
   useEffect(() => {
     if (!box.current || !styleUrl) return;
+    // The bundled library cannot find its worker file, so point it at the copy in public/ (see the postinstall script).
+    maplibregl.setWorkerUrl(new URL("/maplibre-gl-worker.mjs", window.location.href).href);
     const map = new maplibregl.Map({
       container: box.current,
       style: styleUrl,

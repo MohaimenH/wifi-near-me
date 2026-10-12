@@ -4,7 +4,7 @@ Crowdsourced map of how to connect to WiFi in cafes, hotels, airports, and more.
 
 ## Run locally
 1. `cp .env.example .env`. Set `NEXT_PUBLIC_TILE_STYLE_URL` (a tile provider style URL, not the public OSM server) and `CONTACT_EMAIL`.
-2. `npm install`
+2. `npm install` (it also copies the MapLibre worker file to `public/maplibre-gl-worker.mjs`; the map needs it)
 3. `npm run db:up && npm run db:migrate`
 4. Import places: fetch with the Overpass query in `scripts/overpass/istanbul.overpassql`, then `npm run import:osm -- data/istanbul.json TR`.
    ```

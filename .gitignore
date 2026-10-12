@@ -5,3 +5,5 @@ node_modules
 data/
 *.tsbuildinfo
 next-env.d.ts
+# Copied from node_modules by the postinstall script.
+public/maplibre-gl-worker.mjs
