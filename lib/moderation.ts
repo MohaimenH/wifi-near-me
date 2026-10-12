@@ -48,6 +48,23 @@ export async function listRevisions(sql: Sql, id: number) {
   }[];
 }
 
+interface Snapshot {
+  label: string; access_type: string; steps_text: string; language: string;
+  password: string | null; password_policy: string;
+}
+
+/** Writes a snapshot back to the entry and records that as a new revision by "moderator". Call inside a transaction. */
+async function applySnapshot(tx: Sql, id: number, s: Snapshot): Promise<void> {
+  await tx`
+    UPDATE wifi_entries
+    SET label = ${s.label}, access_type = ${s.access_type}, steps_text = ${s.steps_text}, language = ${s.language},
+        password = ${s.password}, password_policy = ${s.password_policy}, updated_at = clock_timestamp()
+    WHERE id = ${id}`;
+  await tx`
+    INSERT INTO wifi_entry_revisions (wifi_entry_id, snapshot, submitter_id)
+    VALUES (${id}, ${JSON.stringify(s)}::text::jsonb, 'moderator')`;
+}
+
 /** Applies the second-newest revision and records that as a new revision by "moderator". */
 export async function revertToPrevious(sql: Sql, id: number): Promise<"reverted" | "no_previous" | "not_found"> {
   return sql.begin(async (tx0) => {
@@ -56,18 +73,21 @@ export async function revertToPrevious(sql: Sql, id: number): Promise<"reverted"
     if (!entry) return "not_found" as const;
     const revs = await tx`SELECT snapshot FROM wifi_entry_revisions WHERE wifi_entry_id = ${id} ORDER BY id DESC LIMIT 2`;
     if (revs.length < 2) return "no_previous" as const;
-    const s = revs[1].snapshot as {
-      label: string; access_type: string; steps_text: string; language: string;
-      password: string | null; password_policy: string;
-    };
-    await tx`
-      UPDATE wifi_entries
-      SET label = ${s.label}, access_type = ${s.access_type}, steps_text = ${s.steps_text}, language = ${s.language},
-          password = ${s.password}, password_policy = ${s.password_policy}, updated_at = clock_timestamp()
-      WHERE id = ${id}`;
-    await tx`
-      INSERT INTO wifi_entry_revisions (wifi_entry_id, snapshot, submitter_id)
-      VALUES (${id}, ${JSON.stringify(s)}::text::jsonb, 'moderator')`;
+    await applySnapshot(tx, id, revs[1].snapshot as Snapshot);
+    return "reverted" as const;
+  });
+}
+
+/** Applies one chosen revision of this entry (an id from listRevisions) and records that as a new revision by "moderator". */
+export async function revertTo(sql: Sql, entryId: number, revisionId: number): Promise<"reverted" | "not_found"> {
+  return sql.begin(async (tx0) => {
+    const tx = tx0 as unknown as Sql;
+    const [entry] = await tx`SELECT id FROM wifi_entries WHERE id = ${entryId} FOR UPDATE`;
+    if (!entry) return "not_found" as const;
+    const [rev] = await tx`
+      SELECT snapshot FROM wifi_entry_revisions WHERE id = ${revisionId} AND wifi_entry_id = ${entryId}`;
+    if (!rev) return "not_found" as const;
+    await applySnapshot(tx, entryId, rev.snapshot as Snapshot);
     return "reverted" as const;
   });
 }

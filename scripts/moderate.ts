@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 import { createSql } from "../lib/db";
-import { listForReview, listRevisions, restoreEntry, revertToPrevious, setStatus } from "../lib/moderation";
+import { listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus } from "../lib/moderation";
 import type { EntryStatus } from "../lib/types";
 
 config();
@@ -11,15 +11,15 @@ const USAGE = `Usage:
   npm run moderate -- hide <entryId>        set status to hidden
   npm run moderate -- restore <entryId>     set active and delete its reports
   npm run moderate -- history <entryId>     show revisions (passwords masked)
-  npm run moderate -- revert <entryId>      go back to the previous revision`;
+  npm run moderate -- revert <entryId> [revisionId]   go back to the previous revision, or to a revision id from history`;
 
 const [cmd, ...args] = process.argv.slice(2);
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is not set");
 const sql = createSql(url);
 
-function idArg(): number {
-  const id = Number(args[0]);
+function idArg(i = 0): number {
+  const id = Number(args[i]);
   if (!Number.isInteger(id) || id <= 0) {
     console.error(USAGE);
     process.exit(1);
@@ -50,7 +50,9 @@ try {
       }
       break;
     case "revert":
-      console.log(await revertToPrevious(sql, idArg()));
+      console.log(args[1] === undefined
+        ? await revertToPrevious(sql, idArg())
+        : await revertTo(sql, idArg(), idArg(1)));
       break;
     default:
       console.error(USAGE);

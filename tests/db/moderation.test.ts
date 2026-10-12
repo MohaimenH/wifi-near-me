@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createSql } from "@/lib/db";
-import { listForReview, listRevisions, restoreEntry, revertToPrevious, setStatus } from "@/lib/moderation";
+import { listForReview, listRevisions, restoreEntry, revertTo, revertToPrevious, setStatus } from "@/lib/moderation";
 import { anonymousGuard } from "@/lib/services/guard";
 import { createSubmissionService } from "@/lib/services/submission";
 import type { Actor } from "@/lib/types";
@@ -59,6 +59,26 @@ describe("moderation", () => {
     const revs = await listRevisions(sql, r.entry_id);
     expect(revs).toHaveLength(3);
     expect(revs[0]).toMatchObject({ submitter_id: "moderator" });
+  });
+
+  it("reverts two bad edits to a chosen revision and refuses a revision of another entry", async () => {
+    const r = await svc().submitEntry(actor("x"), await insertPlace(sql), entry);
+    if (r.ignored) throw new Error("unexpected");
+    await svc().editEntry(actor("vandal"), r.entry_id, { ...entry, steps_text: "Spam one." });
+    await svc().editEntry(actor("vandal"), r.entry_id, { ...entry, steps_text: "Spam two." });
+    const first = (await listRevisions(sql, r.entry_id)).at(-1)!;
+    expect(await revertTo(sql, r.entry_id, first.id)).toBe("reverted");
+    const [e] = await sql`SELECT steps_text FROM wifi_entries WHERE id = ${r.entry_id}`;
+    expect(e.steps_text).toBe("Original steps.");
+    const revs = await listRevisions(sql, r.entry_id);
+    expect(revs).toHaveLength(4);
+    expect(revs[0]).toMatchObject({ submitter_id: "moderator" });
+
+    const other = await svc().submitEntry(actor("y"), await insertPlace(sql), entry);
+    if (other.ignored) throw new Error("unexpected");
+    const otherRev = (await listRevisions(sql, other.entry_id))[0];
+    expect(await revertTo(sql, r.entry_id, otherRev.id)).toBe("not_found");
+    expect(await revertTo(sql, 9999, first.id)).toBe("not_found");
   });
 
   it("reports no_previous and not_found", async () => {
